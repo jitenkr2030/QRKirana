@@ -27,7 +27,8 @@ import {
   Calendar,
   Gift,
   Shield,
-  CreditCard
+  CreditCard,
+  Receipt
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -483,10 +484,12 @@ export default function DashboardPage() {
                       Add New Product
                     </Button>
                   </Link>
-                  <Button className="w-full" variant="outline">
-                    <QrCode className="h-4 w-4 mr-2" />
-                    Print QR Code
-                  </Button>
+                  <Link href="/dashboard/billing">
+                    <Button className="w-full" variant="outline">
+                      <Receipt className="h-4 w-4 mr-2" />
+                      QRBilling
+                    </Button>
+                  </Link>
                   <Link href="/dashboard/subscriptions">
                     <Button className="w-full" variant="outline">
                       <Package className="h-4 w-4 mr-2" />
