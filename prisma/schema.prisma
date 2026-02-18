@@ -1,0 +1,327 @@
+// QRKirana Database Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Shop {
+  id                String   @id @default(cuid())
+  name              String
+  ownerName         String
+  mobile            String
+  email             String?  @unique
+  address           String
+  category          String   // Kirana, Dairy, Medical, etc.
+  uniqueUrl         String   @unique
+  qrCodeUrl         String?
+  password          String   @default("123456") // Default password for demo
+  isActive          Boolean  @default(true)
+  subscriptionType  String   @default("free") // free, premium
+  subscriptionEnds DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  products          Product[]
+  orders            Order[]
+  customers         Customer[]
+  loyaltyPoints     LoyaltyPoint[]
+  creditAccounts    CreditAccount[]
+  creditSettings    CreditSettings[]
+  subscriptions     Subscription[]
+  subscriptionSettings SubscriptionSettings[]
+  invoices          Invoice[]
+  payments          Payment[]
+  
+  @@map("shops")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  shopId      String
+  name        String
+  price       Float
+  unit        String   // kg, litre, packet, piece
+  category    String?
+  description String?
+  inStock     Boolean  @default(true)
+  image       String?
+  isSubscription Boolean @default(false)
+  subscriptionPrice Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  orderItems  OrderItem[]
+  subscriptions Subscription[]
+  
+  @@map("products")
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  shopId      String
+  name        String
+  mobile      String
+  email       String?
+  address     String?
+  totalOrders Int      @default(0)
+  totalSpent  Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  orders      Order[]
+  loyaltyPoints LoyaltyPoint[]
+  creditAccounts CreditAccount[]
+  subscriptions Subscription[]
+  
+  @@unique([shopId, mobile])
+  @@map("customers")
+}
+
+model Order {
+  id             String      @id @default(cuid())
+  shopId         String
+  customerId     String?
+  customerName   String
+  customerMobile String
+  customerEmail  String?
+  customerAddress String?
+  items          OrderItem[]
+  totalAmount    Float
+  status         OrderStatus @default(PENDING)
+  deliveryType   String      @default("delivery") // delivery, pickup
+  paymentMethod  String      @default("cod") // cod, upi, advance
+  paymentStatus  String      @default("pending")
+  notes          String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  
+  shop           Shop        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customer       Customer?   @relation(fields: [customerId], references: [id])
+  
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String
+  productId String
+  quantity  Int
+  price     Float
+  total     Float
+  
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+  
+  @@map("order_items")
+}
+
+model LoyaltyPoint {
+  id          String   @id @default(cuid())
+  shopId      String
+  customerId  String
+  points      Int      @default(0)
+  orderId     String?
+  description String?
+  createdAt   DateTime @default(now())
+  
+  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customer    Customer @relation(fields: [customerId], references: [id])
+  
+  @@map("loyalty_points")
+}
+
+model CreditSettings {
+  id                    String   @id @default(cuid())
+  shopId                String
+  defaultCreditLimit    Float    @default(5000)
+  minCreditScore        Float    @default(60)
+  interestRate          Float    @default(0) // Annual interest rate in %
+  lateFeeRate           Float    @default(0.02) // 2% late fee
+  gracePeriod           Int      @default(7) // Days
+  autoApprove           Boolean  @default(true)
+  requireVerification   Boolean  @default(false)
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  shop                  Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  
+  @@map("credit_settings")
+}
+
+model CreditAccount {
+  id                String   @id @default(cuid())
+  customerId        String
+  shopId            String
+  creditLimit       Float    @default(0)
+  currentBalance    Float    @default(0)
+  availableCredit   Float    @default(0)
+  creditScore       Float    @default(100)
+  isActive          Boolean  @default(true)
+  dueDate           DateTime?
+  lastPaymentDate   DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  customer          Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  shop              Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  transactions      CreditTransaction[]
+  
+  @@unique([customerId, shopId])
+  @@map("credit_accounts")
+}
+
+model CreditTransaction {
+  id          String      @id @default(cuid())
+  accountId   String
+  type        String      // CREDIT, DEBIT, PAYMENT, ADJUSTMENT, INTEREST, FEE
+  amount      Float
+  balance     Float       // Balance after transaction
+  description String?
+  reference   String?     // Order ID, payment reference
+  metadata    Json?       // Additional transaction data
+  createdAt   DateTime    @default(now())
+  
+  account     CreditAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@map("credit_transactions")
+}
+
+model Subscription {
+  id              String   @id @default(cuid())
+  customerId      String
+  shopId          String
+  productId       String
+  quantity        Float
+  unit            String   // litre, ml, kg, grams, pieces, etc.
+  pricePerUnit    Float
+  frequency       String   // daily, weekly, custom
+  deliveryTime    String   // e.g., "06:00", "07:30"
+  deliveryDays    String   // JSON string of days: "monday,tuesday,wednesday"
+  isActive        Boolean  @default(true)
+  startDate       DateTime
+  endDate         DateTime?
+  nextDelivery    DateTime?
+  autoCharge      Boolean  @default(false)
+  lastCharged     DateTime?
+  paused          Boolean  @default(false)
+  pauseReason     String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  shop            Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  deliveries      DeliverySchedule[]
+  
+  @@unique([customerId, productId, shopId])
+  @@map("subscriptions")
+}
+
+model DeliverySchedule {
+  id                String   @id @default(cuid())
+  subscriptionId    String
+  deliveryDate      DateTime
+  scheduledTime     String   // e.g., "06:00"
+  status            String   // SCHEDULED, DELIVERED, SKIPPED, CANCELLED, FAILED
+  quantity          Float
+  deliveredBy       String?
+  deliveryAddress   String?
+  notes             String?
+  actualQuantity    Float?
+  actualPrice       Float?
+  deliveredAt       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  subscription      Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  
+  @@map("delivery_schedules")
+}
+
+model SubscriptionSettings {
+  id                String   @id @default(cuid())
+  shopId            String
+  autoGenerate      Boolean  @default(true)
+  defaultFrequency  String   @default("daily")
+  minSubscriptionDays Int     @default(7)
+  allowPause        Boolean  @default(true)
+  allowCancel       Boolean  @default(true)
+  cancellationFee   Float    @default(0)
+  pauseFee          Float    @default(0)
+  deliveryRadius    Float    @default(5) // km
+  deliveryCharge    Float    @default(0)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  shop              Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  
+  @@map("subscription_settings")
+}
+
+model Invoice {
+  id              String   @id @default(cuid())
+  invoiceNumber   String   @unique
+  orderId         String?
+  customerId      String?
+  shopId          String
+  items           Json     // Invoice items data
+  subtotal        Float
+  taxAmount       Float    @default(0)
+  totalAmount     Float
+  status          String    // DRAFT, SENT, PAID, OVERDUE, CANCELLED
+  dueDate         DateTime
+  paidAmount      Float    @default(0)
+  balanceAmount   Float
+  paymentMethod   String?
+  paymentStatus   String?
+  reference       String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  shop            Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  payments        Payment[]
+  
+  @@map("invoices")
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  invoiceId      String?
+  orderId       String?
+  customerId    String?
+  shopId         String
+  amount         Float
+  method         String    // UPI, CASH, CARD, CREDIT, QR
+  status         String    // PENDING, COMPLETED, FAILED, REFUNDED
+  transactionId String?
+  reference      String?
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  invoice        Invoice? @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  shop            Shop?     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  
+  @@map("payments")
+}
+
+enum OrderStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  PREPARING
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
